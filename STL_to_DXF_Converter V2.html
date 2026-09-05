@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STL to DXF Converter</title>
+<style>
+  :root{
+    --bg:#f4f6f8;
+    --panel:#ffffff;
+    --text:#1d2733;
+    --muted:#667085;
+    --line:#d0d5dd;
+    --accent:#2f6fed;
+    --accent2:#2458bd;
+    --good:#157f3b;
+    --warn:#a15c00;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Arial, Helvetica, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  .wrap{
+    max-width:980px;
+    margin:32px auto;
+    padding:0 18px;
+  }
+  h1{
+    margin:0 0 6px;
+    font-size:30px;
+  }
+  .subtitle{
+    margin:0 0 24px;
+    color:var(--muted);
+    line-height:1.45;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:18px;
+    box-shadow:0 2px 8px rgba(16,24,40,.05);
+  }
+  .row{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    align-items:end;
+  }
+  .field{
+    flex:1 1 210px;
+  }
+  label{
+    display:block;
+    font-weight:700;
+    margin-bottom:7px;
+  }
+  input[type=file], select, input[type=number]{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+    font-size:15px;
+  }
+  button{
+    border:0;
+    border-radius:9px;
+    padding:11px 18px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .primary{
+    background:var(--accent);
+    color:white;
+  }
+  .primary:hover{background:var(--accent2)}
+  .secondary{
+    background:#eef2f6;
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+  button:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+  }
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:10px;
+    margin-top:16px;
+  }
+  .stat{
+    border:1px solid var(--line);
+    background:#fafbfc;
+    border-radius:10px;
+    padding:12px;
+  }
+  .stat .k{
+    font-size:12px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.05em;
+  }
+  .stat .v{
+    font-size:18px;
+    font-weight:700;
+    margin-top:3px;
+  }
+  #status{
+    margin-top:14px;
+    padding:10px 12px;
+    border-radius:8px;
+    background:#f2f4f7;
+    color:#344054;
+    min-height:40px;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:440px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:#111820;
+  }
+  .small{
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.45;
+  }
+  .note{
+    border-left:4px solid var(--warn);
+    background:#fff7ed;
+    padding:12px 14px;
+    border-radius:8px;
+    line-height:1.45;
+  }
+  .good{color:var(--good);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>STL to DXF Converter</h1>
+  <p class="subtitle">
+    Local browser-based converter for STL triangle meshes. Nothing is uploaded. You can choose an output folder in supported browsers such as Chrome or Edge.
+    The exported DXF represents each STL triangle as a DXF <b>3DFACE</b> entity.
+  </p>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="fileInput">STL file</label>
+        <input id="fileInput" type="file" accept=".stl,model/stl">
+      </div>
+
+      <div class="field">
+        <label for="inputUnits">STL units</label>
+        <select id="inputUnits">
+          <option value="1">Millimeters</option>
+          <option value="25.4">Inches</option>
+          <option value="1000">Meters</option>
+          <option value="10">Centimeters</option>
+          <option value="0.001">Microns (µm)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="outputUnits">DXF units</label>
+        <select id="outputUnits">
+          <option value="mm">Millimeters</option>
+          <option value="in">Inches</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Output folder</label>
+        <button id="folderBtn" class="secondary" type="button" style="width:100%">Choose Output Folder</button>
+        <div id="folderName" class="small" style="margin-top:7px">No folder selected — browser Downloads will be used.</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">File</div><div id="sFile" class="v">—</div></div>
+      <div class="stat"><div class="k">Triangles</div><div id="sTris" class="v">—</div></div>
+      <div class="stat"><div class="k">X size</div><div id="sX" class="v">—</div></div>
+      <div class="stat"><div class="k">Y size</div><div id="sY" class="v">—</div></div>
+      <div class="stat"><div class="k">Z size</div><div id="sZ" class="v">—</div></div>
+    </div>
+
+    <div id="status">Choose an STL file to begin.</div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+      <button id="exportBtn" class="primary" disabled>Export DXF</button>
+      <button id="fitBtn" class="secondary" disabled>Fit Preview</button>
+      <button id="resetBtn" class="secondary" disabled>Reset View</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>3D Preview</label>
+    <canvas id="canvas" width="900" height="440"></canvas>
+    <p class="small">
+      Drag to rotate. Mouse wheel to zoom. The preview is only for orientation; the exported coordinates remain unchanged.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="note">
+      <b>CNC note:</b> STL is a 3D triangular mesh, while many CNC programs use DXF mainly for 2D profiles.
+      This converter writes a true 3D DXF mesh using <b>3DFACE</b> entities. Before machining,
+      confirm that your CAM software accepts 3D DXF meshes. If it expects a 2D DXF outline,
+      a section/profile extraction tool is more appropriate.
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const fileInput = document.getElementById('fileInput');
+  const inputUnits = document.getElementById('inputUnits');
+  const outputUnits = document.getElementById('outputUnits');
+  const exportBtn = document.getElementById('exportBtn');
+  const folderBtn = document.getElementById('folderBtn');
+  const folderName = document.getElementById('folderName');
+  const fitBtn = document.getElementById('fitBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusEl = document.getElementById('status');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  let triangles = [];
+  let fileName = '';
+  let bounds = null;
+  let outputDirHandle = null;
+  let view = {rx:-0.55, ry:0.75, zoom:1, panX:0, panY:0};
+
+  function setStatus(msg, good=false){
+    statusEl.innerHTML = good ? '<span class="good">'+msg+'</span>' : msg;
+  }
+
+  function parseSTL(arrayBuffer){
+    if(isBinarySTL(arrayBuffer)) return parseBinarySTL(arrayBuffer);
+    const text = new TextDecoder().decode(arrayBuffer);
+    return parseASCIISTL(text);
+  }
+
+  function isBinarySTL(buffer){
+    if(buffer.byteLength < 84) return false;
+    const dv = new DataView(buffer);
+    const triCount = dv.getUint32(80, true);
+    const expected = 84 + triCount * 50;
+    if(expected === buffer.byteLength) return true;
+
+    const head = new TextDecoder().decode(buffer.slice(0, Math.min(256, buffer.byteLength))).trimStart().toLowerCase();
+    if(!head.startsWith('solid')) return true;
+    return false;
+  }
+
+  function parseBinarySTL(buffer){
+    const dv = new DataView(buffer);
+    const count = dv.getUint32(80, true);
+    const out = [];
+    let off = 84;
+    for(let i=0;i<count;i++){
+      off += 12; // normal
+      const tri = [];
+      for(let v=0;v<3;v++){
+        tri.push([
+          dv.getFloat32(off, true),
+          dv.getFloat32(off+4, true),
+          dv.getFloat32(off+8, true)
+        ]);
+        off += 12;
+      }
+      out.push(tri);
+      off += 2;
+    }
+    return out;
+  }
+
+  function parseASCIISTL(text){
+    const re = /vertex\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)/g;
+    const verts = [];
+    let m;
+    while((m = re.exec(text)) !== null){
+      verts.push([parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])]);
+    }
+    if(verts.length < 3 || verts.length % 3 !== 0){
+      throw new Error('Could not read a valid ASCII STL triangle list.');
+    }
+    const out = [];
+    for(let i=0;i<verts.length;i+=3) out.push([verts[i],verts[i+1],verts[i+2]]);
+    return out;
+  }
+
+  function getBounds(tris){
+    let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+    for(const t of tris){
+      for(const p of t){
+        minX=Math.min(minX,p[0]); minY=Math.min(minY,p[1]); minZ=Math.min(minZ,p[2]);
+        maxX=Math.max(maxX,p[0]); maxY=Math.max(maxY,p[1]); maxZ=Math.max(maxZ,p[2]);
+      }
+    }
+    return {
+      minX,minY,minZ,maxX,maxY,maxZ,
+      sx:maxX-minX, sy:maxY-minY, sz:maxZ-minZ,
+      cx:(minX+maxX)/2, cy:(minY+maxY)/2, cz:(minZ+maxZ)/2
+    };
+  }
+
+  function updateStats(){
+    const inputToMM = parseFloat(inputUnits.value);
+    const outFactor = outputUnits.value === 'mm' ? inputToMM : inputToMM/25.4;
+    const unit = outputUnits.value === 'mm' ? 'mm' : 'in';
+
+    document.getElementById('sFile').textContent = fileName || '—';
+    document.getElementById('sTris').textContent = triangles.length ? triangles.length.toLocaleString() : '—';
+    document.getElementById('sX').textContent = bounds ? (bounds.sx*outFactor).toFixed(3)+' '+unit : '—';
+    document.getElementById('sY').textContent = bounds ? (bounds.sy*outFactor).toFixed(3)+' '+unit : '—';
+    document.getElementById('sZ').textContent = bounds ? (bounds.sz*outFactor).toFixed(3)+' '+unit : '—';
+  }
+
+  function dxfUnitsCode(){
+    return outputUnits.value === 'mm' ? 4 : 1; // AutoCAD INSUNITS: 4=mm, 1=inches
+  }
+
+  function num(v){
+    if(Math.abs(v) < 1e-12) v = 0;
+    return Number(v.toFixed(8)).toString();
+  }
+
+  function buildDXF(){
+    const inputToMM = parseFloat(inputUnits.value);
+    const factor = outputUnits.value === 'mm' ? inputToMM : inputToMM/25.4;
+
+    const a = [];
+    const p = (...items) => { for(const x of items) a.push(String(x)); };
+
+    p('0','SECTION','2','HEADER');
+    p('9','$ACADVER','1','AC1015');
+    p('9','$INSUNITS','70',String(dxfUnitsCode()));
+    p('0','ENDSEC');
+
+    p('0','SECTION','2','TABLES');
+    p('0','TABLE','2','LAYER','70','1');
+    p('0','LAYER','2','STL_MESH','70','0','62','7','6','CONTINUOUS');
+    p('0','ENDTAB');
+    p('0','ENDSEC');
+
+    p('0','SECTION','2','ENTITIES');
+
+    for(const tri of triangles){
+      const q = tri.map(v => [v[0]*factor, v[1]*factor, v[2]*factor]);
+      p('0','3DFACE','8','STL_MESH');
+      p('10',num(q[0][0]),'20',num(q[0][1]),'30',num(q[0][2]));
+      p('11',num(q[1][0]),'21',num(q[1][1]),'31',num(q[1][2]));
+      p('12',num(q[2][0]),'22',num(q[2][1]),'32',num(q[2][2]));
+      p('13',num(q[2][0]),'23',num(q[2][1]),'33',num(q[2][2]));
+    }
+
+    p('0','ENDSEC','0','EOF');
+    return a.join('\r\n')+'\r\n';
+  }
+
+  async function chooseOutputFolder(){
+    if(!('showDirectoryPicker' in window)){
+      folderName.textContent = 'Folder selection is not supported by this browser. DXF files will use the browser Downloads folder.';
+      setStatus('Your browser does not allow a local HTML page to choose a folder. Chrome or Edge generally supports this feature.');
+      return;
+    }
+    try{
+      outputDirHandle = await window.showDirectoryPicker({mode:'readwrite'});
+      folderName.textContent = 'Selected: ' + outputDirHandle.name;
+      setStatus('Output folder selected: ' + outputDirHandle.name, true);
+    }catch(err){
+      if(err.name !== 'AbortError') setStatus('Could not select output folder: ' + err.message);
+    }
+  }
+
+  async function downloadDXF(){
+    if(!triangles.length) return;
+    setStatus('Building DXF...');
+    try{
+      const dxf = buildDXF();
+      const base = fileName.replace(/\.stl$/i,'') || 'converted';
+      const outName = base + '.dxf';
+
+      if(outputDirHandle){
+        const permission = await outputDirHandle.requestPermission({mode:'readwrite'});
+        if(permission !== 'granted') throw new Error('Write permission to the selected folder was not granted.');
+        const fileHandle = await outputDirHandle.getFileHandle(outName, {create:true});
+        const writable = await fileHandle.createWritable();
+        await writable.write(dxf);
+        await writable.close();
+        setStatus('DXF saved successfully to "' + outputDirHandle.name + '" as ' + outName + '.', true);
+      }else{
+        const blob = new Blob([dxf], {type:'application/dxf'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = outName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+        setStatus('DXF exported as ' + outName + '. No output folder was selected, so your browser Downloads setting was used.', true);
+      }
+    }catch(err){
+      setStatus('Export error: '+err.message);
+    }
+  }
+
+  function rotPoint(p){
+    let x=p[0]-bounds.cx, y=p[1]-bounds.cy, z=p[2]-bounds.cz;
+    const cy=Math.cos(view.ry), sy=Math.sin(view.ry);
+    let x1=x*cy+z*sy, z1=-x*sy+z*cy;
+    const cx=Math.cos(view.rx), sx=Math.sin(view.rx);
+    let y2=y*cx-z1*sx, z2=y*sx+z1*cx;
+    return [x1,y2,z2];
+  }
+
+  function draw(){
+    const w=canvas.width, h=canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#111820';
+    ctx.fillRect(0,0,w,h);
+
+    if(!triangles.length || !bounds){
+      ctx.fillStyle='#9aa4b2';
+      ctx.font='18px Arial';
+      ctx.textAlign='center';
+      ctx.fillText('Load an STL file to preview the model', w/2, h/2);
+      return;
+    }
+
+    const maxDim=Math.max(bounds.sx,bounds.sy,bounds.sz)||1;
+    const baseScale=Math.min(w,h)*0.72/maxDim;
+    const scale=baseScale*view.zoom;
+    const cx=w/2+view.panX, cy=h/2+view.panY;
+
+    const drawTris = triangles.length > 120000
+      ? triangles.filter((_,i)=>i%Math.ceil(triangles.length/120000)===0)
+      : triangles;
+
+    const proj = [];
+    for(const tri of drawTris){
+      const rp=tri.map(rotPoint);
+      const z=(rp[0][2]+rp[1][2]+rp[2][2])/3;
+      proj.push({z, pts:rp.map(q=>[cx+q[0]*scale, cy-q[1]*scale])});
+    }
+    proj.sort((a,b)=>a.z-b.z);
+
+    ctx.lineWidth=.45;
+    for(const t of proj){
+      const shade=Math.max(55,Math.min(190,120+t.z/maxDim*80));
+      ctx.fillStyle=`rgb(${Math.round(shade*.72)},${Math.round(shade*.82)},${Math.round(shade)})`;
+      ctx.strokeStyle='rgba(225,235,245,.20)';
+      ctx.beginPath();
+      ctx.moveTo(t.pts[0][0],t.pts[0][1]);
+      ctx.lineTo(t.pts[1][0],t.pts[1][1]);
+      ctx.lineTo(t.pts[2][0],t.pts[2][1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function fitView(){
+    view.zoom=1; view.panX=0; view.panY=0;
+    draw();
+  }
+  function resetView(){
+    view={rx:-0.55, ry:0.75, zoom:1, panX:0, panY:0};
+    draw();
+  }
+
+  fileInput.addEventListener('change', async e=>{
+    const f=e.target.files[0];
+    if(!f) return;
+    fileName=f.name;
+    setStatus('Reading STL...');
+    try{
+      const buf=await f.arrayBuffer();
+      const parsed=parseSTL(buf);
+      if(!parsed.length) throw new Error('No triangles found.');
+      triangles=parsed;
+      bounds=getBounds(triangles);
+      updateStats();
+      exportBtn.disabled=false;
+      fitBtn.disabled=false;
+      resetBtn.disabled=false;
+      resetView();
+      setStatus(`Loaded ${triangles.length.toLocaleString()} triangles. Ready to export.`, true);
+    }catch(err){
+      triangles=[]; bounds=null;
+      exportBtn.disabled=true;
+      fitBtn.disabled=true;
+      resetBtn.disabled=true;
+      updateStats();
+      draw();
+      setStatus('STL read error: '+err.message);
+    }
+  });
+
+  inputUnits.addEventListener('change', updateStats);
+  outputUnits.addEventListener('change', updateStats);
+  folderBtn.addEventListener('click', chooseOutputFolder);
+  exportBtn.addEventListener('click', downloadDXF);
+  fitBtn.addEventListener('click', fitView);
+  resetBtn.addEventListener('click', resetView);
+
+  let dragging=false, lastX=0,lastY=0;
+  canvas.addEventListener('mousedown', e=>{
+    dragging=true; lastX=e.clientX; lastY=e.clientY;
+  });
+  window.addEventListener('mouseup', ()=>dragging=false);
+  window.addEventListener('mousemove', e=>{
+    if(!dragging || !triangles.length) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    view.ry += dx*0.008;
+    view.rx += dy*0.008;
+    draw();
+  });
+  canvas.addEventListener('wheel', e=>{
+    if(!triangles.length) return;
+    e.preventDefault();
+    const s=Math.exp(-e.deltaY*0.001);
+    view.zoom=Math.max(.08,Math.min(20,view.zoom*s));
+    draw();
+  },{passive:false});
+
+  draw();
+})();
+</script>
+</body>
+</html>
